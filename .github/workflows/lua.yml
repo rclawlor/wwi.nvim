@@ -1,0 +1,19 @@
+name: Lua
+
+on: [push, pull_request]
+
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+
+        steps:
+        - uses: actions/checkout@v4
+        - name: Lint
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y luarocks
+            sudo luarocks install luacheck
+            luacheck --globals vim -- .

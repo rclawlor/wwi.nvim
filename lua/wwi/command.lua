@@ -7,6 +7,8 @@ local config = require("wwi.config")
 -- Variables
 LINE = 1
 LINE_MARK = nil
+CWD = ""
+FILENAMES = {}
 
 
 --- Closes the preview window
@@ -84,14 +86,27 @@ local function configure_floating_window(win_id, buf_id, ns_id, width)
     )
 
     highlight_line_autocmd(win_id, buf_id, ns_id, width)
+    vim.api.nvim_buf_set_keymap(
+        buf_id,
+        "n",
+        "<CR>",
+        "",
+        {
+            callback = function()
+                local pos = vim.fn.getpos(".")
+                local line = pos[2]
+                local path = CWD .. "/" .. FILENAMES[line]
+                print(path)
+            end
+        }
+    )
 end
 
 
 --- Generate a list
 function M.where_was_i()
-    local cwd = vim.fn.getcwd()
+    CWD = vim.fn.getcwd()
     local files = vim.v.oldfiles
-    local filenames = {}
     local file = 1
 
     local padding = string.rep(" ", config.opts.padding)
@@ -99,30 +114,32 @@ function M.where_was_i()
     for idx = 1, config.opts.files + 1, 1 do
         local filename = files[idx]
         if utils.file_exists(filename) then
-            if filename:find(cwd) == 1 then
-                local concat_filename = file .. " " .. filename:gsub(cwd .. "/", "")
-                filenames[file] = concat_filename
-                max_width = math.max(max_width, #filenames[file])
+            if filename:find(CWD) == 1 then
+                local concat_filename = filename:gsub(CWD .. "/", "")
+                FILENAMES[file] = concat_filename
+                max_width = math.max(max_width, #FILENAMES[file])
                 file = file + 1
             end
         end
     end
 
-    for k, v in pairs(filenames) do
-        filenames[k] = padding .. string.format("%-" .. max_width .. "s", v) .. padding
+    local filenames_pad = {}
+    local width = 1
+    for k, v in pairs(FILENAMES) do
+        filenames_pad[k] = padding .. k .. " " .. string.format("%-" .. max_width .. "s", v) .. padding
+        width = math.max(#filenames_pad[k], width)
     end
 
     local viewport_width = vim.api.nvim_win_get_width(0)
     local viewport_height = vim.api.nvim_win_get_height(0)
 
-    local width = max_width + 2 * config.opts.padding
     local height = file - 1
 
     local row = math.floor((viewport_height - height) / 2)
     local col = math.floor((viewport_width - width) / 2)
 
     local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, #filenames, false, filenames)
+    vim.api.nvim_buf_set_lines(buf, 0, #filenames_pad, false, filenames_pad)
     local win_opts = {
         width = width,
         height = height,

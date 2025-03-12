@@ -2,6 +2,7 @@ local M = {}
 
 -- Imports
 local utils = require("wwi.utils")
+local config = require("wwi.config")
 
 -- Variables
 LINE = 1
@@ -28,40 +29,12 @@ local function close_preview_window(win_id, buf_ids)
 end
 
 
---- Creates autocommand to close floating window based on events
----
---- @param events table list of events
---- @param win_id integer ID of floating window
---- @param buf_ids table IDs of buffers where floating window can be seen
-local function close_win_autocmd(events, win_id, buf_ids)
-    local augroup = vim.api.nvim_create_augroup("floating_window_" .. win_id, {
-        clear = true,
-    })
-    -- close the preview window when entered a buffer that is not
-    -- the floating window buffer or the buffer that spawned it
-    vim.api.nvim_create_autocmd("BufEnter", {
-        group = augroup,
-        callback = function()
-            close_preview_window(win_id, buf_ids)
-        end,
-    })
-
-    if #events > 0 then
-        vim.api.nvim_create_autocmd(events, {
-            group = augroup,
-            callback = function()
-                close_preview_window(win_id)
-            end,
-        })
-    end
-end
-
-
 --- Creates autocommand to highlight current line
 ---
----
-local function highlight_line_autocmd(win_id, buf_id, ns_id)
-    local augroup = vim.api.nvim_create_augroup(
+--- @param win_id integer ID of floating window
+--- @param buf_id integer ID of floating buffer
+local function highlight_line_autocmd(win_id, buf_id, ns_id, width)
+    vim.api.nvim_create_augroup(
         "highlight_line_" .. win_id,
         {
             clear = true
@@ -71,20 +44,20 @@ local function highlight_line_autocmd(win_id, buf_id, ns_id)
     vim.api.nvim_create_autocmd(
         { "CursorMoved" },
         {
-            callback = function(event)
+            callback = function()
                 local pos = vim.fn.getpos(".")
                 if LINE_MARK == nil then
                     LINE_MARK = vim.api.nvim_buf_set_extmark(
-                        buf_id, ns_id, LINE - 1, 1, {hl_group = "SignColumn", end_col = 5}
+                        buf_id, ns_id, LINE - 1, 0, {hl_group = "SignColumn", end_col = width}
                     )
                 else
                     LINE_MARK = vim.api.nvim_buf_set_extmark(
-                        buf_id, ns_id, LINE - 1, 1, {id = LINE_MARK, hl_group = "SignColumn", end_col = 5}
+                        buf_id, ns_id, LINE - 1, 0, {id = LINE_MARK, hl_group = "SignColumn", end_col = width}
                     )
                 end
                 LINE = pos[2]
                 LINE_MARK = vim.api.nvim_buf_set_extmark(
-                    buf_id, ns_id, LINE - 1, 1, {id = LINE_MARK, hl_group = "TermCursor", end_col = 5}
+                    buf_id, ns_id, LINE - 1, 0, {id = LINE_MARK, hl_group = "TermCursor", end_col = width}
                 )
             end
         }
@@ -96,7 +69,7 @@ end
 ---
 --- @param win_id integer ID of floating window
 --- @param buf_id integer ID of floating buffer
-local function configure_floating_window(win_id, buf_id, ns_id)
+local function configure_floating_window(win_id, buf_id, ns_id, width)
     -- Disable folding on current window
     vim.wo[win_id].foldenable = false
 
@@ -110,8 +83,9 @@ local function configure_floating_window(win_id, buf_id, ns_id)
         { silent = true, noremap = true, nowait = true }
     )
 
-    highlight_line_autocmd(win_id, buf_id, ns_id)
+    highlight_line_autocmd(win_id, buf_id, ns_id, width)
 end
+
 
 --- Generate a list
 function M.where_was_i()
@@ -119,23 +93,30 @@ function M.where_was_i()
     local files = vim.v.oldfiles
     local filenames = {}
     local file = 1
-    for idx = 1, 10, 1 do
+
+    local padding = string.rep(" ", config.opts.padding)
+    local max_width = 1
+    for idx = 1, config.opts.files + 1, 1 do
         local filename = files[idx]
         if utils.file_exists(filename) then
             if filename:find(cwd) == 1 then
-                print(filename)
-                filenames[file] = file .. " " .. filename:gsub(cwd .. "/", "")
+                local concat_filename = file .. " " .. filename:gsub(cwd .. "/", "")
+                filenames[file] = concat_filename
+                max_width = math.max(max_width, #filenames[file])
                 file = file + 1
             end
         end
     end
 
+    for k, v in pairs(filenames) do
+        filenames[k] = padding .. string.format("%-" .. max_width .. "s", v) .. padding
+    end
+
     local viewport_width = vim.api.nvim_win_get_width(0)
     local viewport_height = vim.api.nvim_win_get_height(0)
 
-    local scale = 0.5
-    local width = math.floor(viewport_width * scale)
-    local height = math.floor(viewport_height * scale)
+    local width = max_width + 2 * config.opts.padding
+    local height = file - 1
 
     local row = math.floor((viewport_height - height) / 2)
     local col = math.floor((viewport_width - width) / 2)
@@ -156,7 +137,7 @@ function M.where_was_i()
     local win = vim.api.nvim_open_win(buf, true, win_opts)
     local ns_id = vim.api.nvim_create_namespace("wherewasi")
     vim.api.nvim_win_set_hl_ns(win, ns_id)
-    configure_floating_window(win, buf, ns_id)
+    configure_floating_window(win, buf, ns_id, width)
 end
 
 return M

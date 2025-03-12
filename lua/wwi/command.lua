@@ -1,5 +1,12 @@
 local M = {}
 
+-- Imports
+local utils = require("wwi.utils")
+
+-- Variables
+LINE = 1
+LINE_MARK = nil
+
 
 --- Closes the preview window
 ---
@@ -50,11 +57,46 @@ local function close_win_autocmd(events, win_id, buf_ids)
 end
 
 
+--- Creates autocommand to highlight current line
+---
+---
+local function highlight_line_autocmd(win_id, buf_id, ns_id)
+    local augroup = vim.api.nvim_create_augroup(
+        "highlight_line_" .. win_id,
+        {
+            clear = true
+        }
+    )
+
+    vim.api.nvim_create_autocmd(
+        { "CursorMoved" },
+        {
+            callback = function(event)
+                local pos = vim.fn.getpos(".")
+                if LINE_MARK == nil then
+                    LINE_MARK = vim.api.nvim_buf_set_extmark(
+                        buf_id, ns_id, LINE - 1, 1, {hl_group = "SignColumn", end_col = 5}
+                    )
+                else
+                    LINE_MARK = vim.api.nvim_buf_set_extmark(
+                        buf_id, ns_id, LINE - 1, 1, {id = LINE_MARK, hl_group = "SignColumn", end_col = 5}
+                    )
+                end
+                LINE = pos[2]
+                LINE_MARK = vim.api.nvim_buf_set_extmark(
+                    buf_id, ns_id, LINE - 1, 1, {id = LINE_MARK, hl_group = "TermCursor", end_col = 5}
+                )
+            end
+        }
+    )
+end
+
+
 --- Configures floating window and sets up autocommand
 ---
 --- @param win_id integer ID of floating window
 --- @param buf_id integer ID of floating buffer
-local function configure_floating_window(win_id, buf_id)
+local function configure_floating_window(win_id, buf_id, ns_id)
     -- Disable folding on current window
     vim.wo[win_id].foldenable = false
 
@@ -68,8 +110,7 @@ local function configure_floating_window(win_id, buf_id)
         { silent = true, noremap = true, nowait = true }
     )
 
-    -- local close_events = { 'CursorMoved' }
-    -- close_win_autocmd(close_events, win_id, { buf_id })
+    highlight_line_autocmd(win_id, buf_id, ns_id)
 end
 
 --- Generate a list
@@ -77,10 +118,15 @@ function M.where_was_i()
     local cwd = vim.fn.getcwd()
     local files = vim.v.oldfiles
     local filenames = {}
+    local file = 1
     for idx = 1, 10, 1 do
         local filename = files[idx]
-        if filename:find(cwd) == 1 then
-            filenames[idx] = filename:gsub(cwd .. "/", "")
+        if utils.file_exists(filename) then
+            if filename:find(cwd) == 1 then
+                print(filename)
+                filenames[file] = file .. " " .. filename:gsub(cwd .. "/", "")
+                file = file + 1
+            end
         end
     end
 
@@ -95,7 +141,7 @@ function M.where_was_i()
     local col = math.floor((viewport_width - width) / 2)
 
     local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 1, -1, true, {"Hello, World!"})
+    vim.api.nvim_buf_set_lines(buf, 0, #filenames, false, filenames)
     local win_opts = {
         width = width,
         height = height,
@@ -110,8 +156,7 @@ function M.where_was_i()
     local win = vim.api.nvim_open_win(buf, true, win_opts)
     local ns_id = vim.api.nvim_create_namespace("wherewasi")
     vim.api.nvim_win_set_hl_ns(win, ns_id)
-    vim.api.nvim_buf_set_extmark(buf, ns_id, 1, 1, {hl_group = "Cursor", end_col = 10})
-    configure_floating_window(win, buf)
+    configure_floating_window(win, buf, ns_id)
 end
 
 return M

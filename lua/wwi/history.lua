@@ -28,11 +28,26 @@ end
 --- @param file string file to add
 function M.append_file(file)
     if utils.file_exists(file) then
+        -- Find index of file
+        local f_idx = nil
         for f, idx in pairs(M.files) do
-            if idx + 1 > config.opts.files then
-                M.files[f] = nil
+            if f == file then
+                f_idx = idx
+                break
+            end
+        end
+
+        for f, idx in pairs(M.files) do
+            if f_idx == nil then
+                if idx + 1 > config.opts.files then
+                    M.files[f] = nil
+                else
+                    M.files[f] = idx + 1
+                end
             else
-                M.files[f] = idx + 1
+                if idx < f_idx then
+                    M.files[f] = idx + 1
+                end
             end
         end
 

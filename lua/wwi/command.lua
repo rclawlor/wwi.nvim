@@ -5,6 +5,7 @@ local config = require("wwi.config")
 local history = require("wwi.history")
 
 -- Variables
+M.executing = false
 M.line = 1
 M.line_mark = nil
 M.cwd = ""
@@ -26,6 +27,7 @@ local function close_preview_window(win_id, buf_ids)
             local augroup = "highlight_line_" .. win_id
             pcall(vim.api.nvim_del_augroup_by_name, augroup)
             pcall(vim.api.nvim_win_close, win_id, true)
+            M.executing = false
         end
     )
 end
@@ -50,23 +52,14 @@ local function highlight_line_autocmd(win_id, buf_id, ns_id, width)
         {
             group = "highlight_line_" .. win_id,
             callback = function()
-                local bufs = vim.api.nvim_list_bufs()
-                local buf_open = false
-                for _, buf in ipairs(bufs) do
-                    if buf == buf_id then
-                        buf_open = true
-                        break
-                    end
-                end
-
-                -- Cancel action if buffer has been closed
-                if not buf_open then
+                if vim.api.nvim_get_current_buf() ~= buf_id then
                     return
                 end
+
                 local pos = vim.fn.getpos(".")
                 if M.line_mark == nil then
                     M.line_mark = vim.api.nvim_buf_set_extmark(
-                        buf_id, ns_id, M.line - 1, 0, {hl_group = "SignColumn", end_col = width - 1}
+                        buf_id, ns_id, M.line - 1, 0, {hl_group = "SignColumn", end_col = width}
                     )
                 else
                     M.line_mark = vim.api.nvim_buf_set_extmark(
@@ -133,16 +126,21 @@ end
 
 --- Generate a selectable list of previous files
 function M.where_was_i()
+    if M.executing then
+        return
+    end
+    M.executing = true
     M.cwd = vim.fn.getcwd()
     local file = 1
 
     local padding = string.rep(" ", config.opts.padding)
     local max_width = 1
-    for f, _ in pairs(history.files) do
+    M.filenames = {}
+    for f, idx in pairs(history.files) do
         if f:find(M.cwd) == 1 then
             local concat_filename = f:gsub(M.cwd .. "/", "")
-            M.filenames[file] = concat_filename
-            max_width = math.max(max_width, #M.filenames[file])
+            M.filenames[idx] = concat_filename
+            max_width = math.max(max_width, #M.filenames[idx])
             file = file + 1
         end
 
@@ -162,7 +160,7 @@ function M.where_was_i()
     local viewport_width = vim.api.nvim_win_get_width(0)
     local viewport_height = vim.api.nvim_win_get_height(0)
 
-    local height = math.max(file - 1, 1)
+    local height = math.max(#filenames_pad, 1)
 
     local row = math.floor((viewport_height - height) / 2)
     local col = math.floor((viewport_width - width) / 2)

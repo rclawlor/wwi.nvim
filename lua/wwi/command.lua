@@ -1,8 +1,8 @@
 local M = {}
 
 -- Imports
-local utils = require("wwi.utils")
 local config = require("wwi.config")
+local history = require("wwi.history")
 
 -- Variables
 LINE = 1
@@ -35,6 +35,8 @@ end
 ---
 --- @param win_id integer ID of floating window
 --- @param buf_id integer ID of floating buffer
+--- @param ns_id integer ID of highlight namespace
+--- @param width integer width of window
 local function highlight_line_autocmd(win_id, buf_id, ns_id, width)
     vim.api.nvim_create_augroup(
         "highlight_line_" .. win_id,
@@ -64,7 +66,7 @@ local function highlight_line_autocmd(win_id, buf_id, ns_id, width)
                 local pos = vim.fn.getpos(".")
                 if LINE_MARK == nil then
                     LINE_MARK = vim.api.nvim_buf_set_extmark(
-                        buf_id, ns_id, LINE - 1, 0, {hl_group = "SignColumn", end_col = width}
+                        buf_id, ns_id, LINE - 1, 0, {hl_group = "SignColumn", end_col = width - 1}
                     )
                 else
                     LINE_MARK = vim.api.nvim_buf_set_extmark(
@@ -87,7 +89,8 @@ end
 --- @param buf_id integer ID of floating buffer
 --- @param ns_id integer ID of highlight namespace
 --- @param width integer width of window
-local function configure_floating_window(win_id, buf_id, ns_id, width)
+--- @param previous_win integer ID of previous window
+local function configure_floating_window(win_id, buf_id, ns_id, width, previous_win)
     -- Disable folding on current window
     vim.wo[win_id].foldenable = false
 
@@ -114,31 +117,33 @@ local function configure_floating_window(win_id, buf_id, ns_id, width)
             callback = function()
                 local pos = vim.fn.getpos(".")
                 local line = pos[2]
-                local path = CWD .. "/" .. FILENAMES[line]
-                vim.cmd("edit " .. path)
+                if FILENAMES[line] == nil then
+                    close_preview_window(win_id)
+                else
+                    local path = CWD .. "/" .. FILENAMES[line]
+                    close_preview_window(win_id)
+                    vim.api.nvim_set_current_win(previous_win)
+                    vim.cmd("edit " .. path)
+                end
             end
         }
     )
 end
 
 
---- Generate a list
+--- Generate a selectable list of previous files
 function M.where_was_i()
     CWD = vim.fn.getcwd()
-    local files = vim.v.oldfiles
     local file = 1
 
     local padding = string.rep(" ", config.opts.padding)
     local max_width = 1
-    for idx = 1, 2 * config.opts.files + 1, 1 do
-        local filename = files[idx]
-        if utils.file_exists(filename) then
-            if filename:find(CWD) == 1 then
-                local concat_filename = filename:gsub(CWD .. "/", "")
-                FILENAMES[file] = concat_filename
-                max_width = math.max(max_width, #FILENAMES[file])
-                file = file + 1
-            end
+    for f, _ in pairs(history.files) do
+        if f:find(CWD) == 1 then
+            local concat_filename = f:gsub(CWD .. "/", "")
+            FILENAMES[file] = concat_filename
+            max_width = math.max(max_width, #FILENAMES[file])
+            file = file + 1
         end
 
         if file > config.opts.files then
@@ -152,6 +157,7 @@ function M.where_was_i()
         filenames_pad[k] = padding .. k .. " " .. string.format("%-" .. max_width .. "s", v) .. padding
         width = math.max(#filenames_pad[k], width)
     end
+    width = math.max(width, 11)
 
     local viewport_width = vim.api.nvim_win_get_width(0)
     local viewport_height = vim.api.nvim_win_get_height(0)
@@ -162,7 +168,12 @@ function M.where_was_i()
     local col = math.floor((viewport_width - width) / 2)
 
     local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, #filenames_pad, false, filenames_pad)
+    if #filenames_pad == 0 then
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "   EMPTY   " })
+    else
+        vim.api.nvim_buf_set_lines(buf, 0, #filenames_pad, false, filenames_pad)
+    end
+    local previous_win = vim.api.nvim_get_current_win()
     local win_opts = {
         width = width,
         height = height,
@@ -177,7 +188,7 @@ function M.where_was_i()
     local win = vim.api.nvim_open_win(buf, true, win_opts)
     local ns_id = vim.api.nvim_create_namespace("wherewasi")
     vim.api.nvim_win_set_hl_ns(win, ns_id)
-    configure_floating_window(win, buf, ns_id, width)
+    configure_floating_window(win, buf, ns_id, width, previous_win)
 end
 
 return M

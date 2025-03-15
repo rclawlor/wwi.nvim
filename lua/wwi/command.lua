@@ -71,19 +71,23 @@ end
 ---
 --- @param win_id integer ID of floating window
 --- @param buf_id integer ID of floating buffer
+--- @param ns_id integer ID of highlight namespace
+--- @param width integer width of window
 local function configure_floating_window(win_id, buf_id, ns_id, width)
     -- Disable folding on current window
     vim.wo[win_id].foldenable = false
 
     vim.bo[buf_id].bufhidden = "wipe"
 
-    vim.api.nvim_buf_set_keymap(
-        buf_id,
-        'n',
-        'q',
-        '<cmd>cclose<cr>',
-        { silent = true, noremap = true, nowait = true }
-    )
+    for _, keymap in ipairs(config.opts.close_keymaps) do
+        vim.api.nvim_buf_set_keymap(
+            buf_id,
+            "n",
+            keymap,
+            "<cmd>close<cr>",
+            { silent = true, noremap = true, nowait = true }
+        )
+    end
 
     highlight_line_autocmd(win_id, buf_id, ns_id, width)
     vim.api.nvim_buf_set_keymap(
@@ -96,7 +100,7 @@ local function configure_floating_window(win_id, buf_id, ns_id, width)
                 local pos = vim.fn.getpos(".")
                 local line = pos[2]
                 local path = CWD .. "/" .. FILENAMES[line]
-                print(path)
+                vim.cmd("edit " .. path)
             end
         }
     )
@@ -111,7 +115,7 @@ function M.where_was_i()
 
     local padding = string.rep(" ", config.opts.padding)
     local max_width = 1
-    for idx = 1, config.opts.files + 1, 1 do
+    for idx = 1, 2 * config.opts.files + 1, 1 do
         local filename = files[idx]
         if utils.file_exists(filename) then
             if filename:find(CWD) == 1 then
@@ -120,6 +124,10 @@ function M.where_was_i()
                 max_width = math.max(max_width, #FILENAMES[file])
                 file = file + 1
             end
+        end
+
+        if file > config.opts.files then
+            break
         end
     end
 
@@ -133,7 +141,7 @@ function M.where_was_i()
     local viewport_width = vim.api.nvim_win_get_width(0)
     local viewport_height = vim.api.nvim_win_get_height(0)
 
-    local height = file - 1
+    local height = math.max(file - 1, 1)
 
     local row = math.floor((viewport_height - height) / 2)
     local col = math.floor((viewport_width - width) / 2)

@@ -5,10 +5,10 @@ local config = require("wwi.config")
 local history = require("wwi.history")
 
 -- Variables
-LINE = 1
-LINE_MARK = nil
-CWD = ""
-FILENAMES = {}
+M.line = 1
+M.line_mark = nil
+M.cwd = ""
+M.filenames = {}
 
 
 --- Closes the preview window
@@ -64,18 +64,18 @@ local function highlight_line_autocmd(win_id, buf_id, ns_id, width)
                     return
                 end
                 local pos = vim.fn.getpos(".")
-                if LINE_MARK == nil then
-                    LINE_MARK = vim.api.nvim_buf_set_extmark(
-                        buf_id, ns_id, LINE - 1, 0, {hl_group = "SignColumn", end_col = width - 1}
+                if M.line_mark == nil then
+                    M.line_mark = vim.api.nvim_buf_set_extmark(
+                        buf_id, ns_id, M.line - 1, 0, {hl_group = "SignColumn", end_col = width - 1}
                     )
                 else
-                    LINE_MARK = vim.api.nvim_buf_set_extmark(
-                        buf_id, ns_id, LINE - 1, 0, {id = LINE_MARK, hl_group = "SignColumn", end_col = width}
+                    M.line_mark = vim.api.nvim_buf_set_extmark(
+                        buf_id, ns_id, M.line - 1, 0, {id = M.line_mark, hl_group = "SignColumn", end_col = width}
                     )
                 end
-                LINE = pos[2]
-                LINE_MARK = vim.api.nvim_buf_set_extmark(
-                    buf_id, ns_id, LINE - 1, 0, {id = LINE_MARK, hl_group = "TermCursor", end_col = width}
+                M.line = pos[2]
+                M.line_mark = vim.api.nvim_buf_set_extmark(
+                    buf_id, ns_id, M.line - 1, 0, {id = M.line_mark, hl_group = "TermCursor", end_col = width}
                 )
             end
         }
@@ -117,10 +117,10 @@ local function configure_floating_window(win_id, buf_id, ns_id, width, previous_
             callback = function()
                 local pos = vim.fn.getpos(".")
                 local line = pos[2]
-                if FILENAMES[line] == nil then
+                if M.filenames[line] == nil then
                     close_preview_window(win_id)
                 else
-                    local path = CWD .. "/" .. FILENAMES[line]
+                    local path = M.cwd .. "/" .. M.filenames[line]
                     close_preview_window(win_id)
                     vim.api.nvim_set_current_win(previous_win)
                     vim.cmd("edit " .. path)
@@ -133,16 +133,16 @@ end
 
 --- Generate a selectable list of previous files
 function M.where_was_i()
-    CWD = vim.fn.getcwd()
+    M.cwd = vim.fn.getcwd()
     local file = 1
 
     local padding = string.rep(" ", config.opts.padding)
     local max_width = 1
     for f, _ in pairs(history.files) do
-        if f:find(CWD) == 1 then
-            local concat_filename = f:gsub(CWD .. "/", "")
-            FILENAMES[file] = concat_filename
-            max_width = math.max(max_width, #FILENAMES[file])
+        if f:find(M.cwd) == 1 then
+            local concat_filename = f:gsub(M.cwd .. "/", "")
+            M.filenames[file] = concat_filename
+            max_width = math.max(max_width, #M.filenames[file])
             file = file + 1
         end
 
@@ -153,7 +153,7 @@ function M.where_was_i()
 
     local filenames_pad = {}
     local width = 1
-    for k, v in pairs(FILENAMES) do
+    for k, v in pairs(M.filenames) do
         filenames_pad[k] = padding .. k .. " " .. string.format("%-" .. max_width .. "s", v) .. padding
         width = math.max(#filenames_pad[k], width)
     end

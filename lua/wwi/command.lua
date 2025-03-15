@@ -23,7 +23,7 @@ local function close_preview_window(win_id, buf_ids)
                 return
             end
 
-            local augroup = "floating_window_" .. win_id
+            local augroup = "highlight_line_" .. win_id
             pcall(vim.api.nvim_del_augroup_by_name, augroup)
             pcall(vim.api.nvim_win_close, win_id, true)
         end
@@ -46,7 +46,21 @@ local function highlight_line_autocmd(win_id, buf_id, ns_id, width)
     vim.api.nvim_create_autocmd(
         { "CursorMoved" },
         {
+            group = "highlight_line_" .. win_id,
             callback = function()
+                local bufs = vim.api.nvim_list_bufs()
+                local buf_open = false
+                for _, buf in ipairs(bufs) do
+                    if buf == buf_id then
+                        buf_open = true
+                        break
+                    end
+                end
+
+                -- Cancel action if buffer has been closed
+                if not buf_open then
+                    return
+                end
                 local pos = vim.fn.getpos(".")
                 if LINE_MARK == nil then
                     LINE_MARK = vim.api.nvim_buf_set_extmark(
@@ -80,12 +94,13 @@ local function configure_floating_window(win_id, buf_id, ns_id, width)
     vim.bo[buf_id].bufhidden = "wipe"
 
     for _, keymap in ipairs(config.opts.close_keymaps) do
-        vim.api.nvim_buf_set_keymap(
-            buf_id,
+        vim.keymap.set(
             "n",
             keymap,
-            "<cmd>close<cr>",
-            { silent = true, noremap = true, nowait = true }
+            function()
+                close_preview_window(win_id)
+            end,
+            { silent = true, noremap = true, nowait = true, buffer = true }
         )
     end
 
